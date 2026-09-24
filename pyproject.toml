@@ -1,0 +1,13 @@
+[project]
+name = "legged-robots-notebooks"
+version = "0.1.0"
+description = "Interactive marimo notebooks for a class on legged robots"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "marimo>=0.16",
+    "matplotlib>=3.10",
+    "numpy>=2.3",
+    "scipy>=1.16",
+]
+
