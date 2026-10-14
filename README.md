@@ -13,8 +13,14 @@ uv sync
 
 ## Choose a lesson
 
+Start with `uv run marimo run nb_learning_lab.py` to choose a model and compare
+value iteration with sampled RL, tabular with approximated values, and greedy
+actions with a fitted policy or policy iteration. Reward code and parameters
+are editable; plots and animations follow the selected learning iteration.
+
 | What to explore | Run |
 | --- | --- |
+| Compare models, value representations, and policy-learning choices in one GUI | `uv run marimo run nb_learning_lab.py` |
 | Stable limit cycles and attraction from different initial conditions | `uv run marimo run nb_van_der_pol.py` |
 | How feedback linearization changes a pendulum's phase portrait | `uv run marimo run nb_pendulum_feedback_linearization.py` |
 | Markov transitions, absorbing states, actions, and discounted rewards | `uv run marimo run nb_markov_process.py` |

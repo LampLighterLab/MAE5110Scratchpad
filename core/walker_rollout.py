@@ -39,12 +39,14 @@ def choose_action(grid, q, speed):
     return int(np.argmax(values))  # Same tie rule as Q iteration.
 
 
-def rollout_policy(grid, q, initial_speed, region, *, max_decisions=15, max_time=20.0):
+def rollout_policy(grid, q, initial_speed, region, *, max_decisions=15, max_time=20.0,
+                   action_selector=None):
     """Apply the current greedy policy to the continuous hybrid model.
 
     Alpha is selected only at theta=0 and held through impact. Returned speeds
     are not snapped to grid nodes. After capture, the actual bounded balancer
     runs to rest; the animation does not replace this motion with a zero state.
+    An optional action_selector(speed) can sample an explicit learned actor.
     """
     if q.shape != grid.shape or not np.all(np.isfinite(q)):
         raise ValueError("Q must be finite and match the state-action grid.")
@@ -86,7 +88,10 @@ def rollout_policy(grid, q, initial_speed, region, *, max_decisions=15, max_time
         if not grid.states[0] <= state[1] <= grid.states[-1]:
             outcome = "Left the policy speed grid"
             break
-        action_index = choose_action(grid, q, state[1])
+        action_index = (choose_action(grid, q, state[1]) if action_selector is None
+                        else action_selector(float(state[1])))
+        if not isinstance(action_index, (int, np.integer)) or not 0 <= action_index < len(grid.actions):
+            raise ValueError("The policy must select a valid action index.")
         alpha = float(grid.actions[action_index])
         decisions.append({"time": elapsed, "speed": float(state[1]), "alpha": alpha,
                           "action_index": action_index})
