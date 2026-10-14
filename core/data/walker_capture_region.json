@@ -1,0 +1,23 @@
+{
+  "source": "../../CodeAssignments/output/assignment_2/tables.npz",
+  "description": "Empirical RoA, 481 angles x 801 velocities; successful intervals eroded by half a velocity grid cell. No standing-speed target is imposed.",
+  "params": {
+    "gravity": 9.81,
+    "length": 1.0,
+    "mass": 1.0,
+    "incline": 0.06,
+    "angle_of_attack": 0.39269908169872414,
+    "ankle_torque": 0.0,
+    "angle_min": 0.39269908169872414,
+    "angle_max": 0.4487989505128276,
+    "torque_min": -0.9810000000000001,
+    "torque_max": 0.49050000000000005,
+    "position_gain": 1.0,
+    "velocity_gain": 2.0,
+    "timestep": 0.005,
+    "balance_horizon": 10.0,
+    "transition_horizon": 12.0,
+    "settle_tolerance": 0.0001,
+    "event_iterations": 25
+  }
+}

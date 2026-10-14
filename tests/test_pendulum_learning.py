@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 from scipy.integrate import quad
 
-from pendulum_learning import (
+from core.pendulum_learning import (
     Pendulum,
     _interpolate,
     _interpolation,

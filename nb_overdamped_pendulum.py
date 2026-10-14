@@ -12,7 +12,7 @@ def _():
     import numpy as np
     from dataclasses import replace
 
-    import pendulum_learning as pl
+    from core import pendulum_learning as pl
 
     return Line2D, mo, np, pl, plt, replace
 

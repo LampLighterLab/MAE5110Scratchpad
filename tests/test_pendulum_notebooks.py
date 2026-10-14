@@ -12,7 +12,7 @@ from marimo._runtime.control_flow import MarimoStopError
 class HiddenActorCriticTests(unittest.TestCase):
     def test_hidden_actor_cells_stop_before_reading_missing_training_variables(self):
         root = Path(__file__).resolve().parents[1]
-        for filename in ["overdamped_pendulum.py", "undamped_pendulum.py"]:
+        for filename in ["nb_overdamped_pendulum.py", "nb_undamped_pendulum.py"]:
             with self.subTest(notebook=filename):
                 path = root / filename
                 spec = importlib.util.spec_from_file_location(path.stem, path)

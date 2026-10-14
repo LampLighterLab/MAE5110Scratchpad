@@ -12,7 +12,7 @@ def _():
     from matplotlib.lines import Line2D
     import numpy as np
 
-    import pendulum_learning as learning
+    from core import pendulum_learning as learning
 
     return Line2D, Rectangle, learning, mo, np, plt
 
