@@ -70,10 +70,15 @@ def _(mo, pg):
     }).form(submit_button_label="Apply pendulum settings and restart")
     reward_editor = mo.ui.code_editor(
         value=pg.DEFAULT_REWARD_SOURCE, language="python", min_height=150,
-        label=("reward(state, action, next_state): states (..., 2) = [θ, θ̇]; "
-               "action and reward (...). Available: np, theta_atol, omega_atol."),
+        label=("reward(state, action, next_state, params): states (..., 2) = [θ, θ̇]; "
+               "action and reward (...). Available: np; params is a dictionary."),
     ).form(submit_button_label="Apply Python reward and restart")
-    mo.accordion({"Reward Python and pendulum settings": mo.vstack([reward_editor, physics_controls])})
+    mo.accordion({"Reward Python and pendulum settings": mo.vstack([
+        physics_controls,
+        mo.md("`params` contains `b`, `dt`, `horizon`, `discount`, `theta_tolerance`, "
+              "`omega_tolerance`, `theta_width`, and `omega_width`. `next_state` is [θ, θ̇] after the step."),
+        reward_editor,
+    ])})
     return physics_controls, reward_editor
 
 

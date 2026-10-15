@@ -1,5 +1,6 @@
 """Numerical checks for the unbounded, continuous-feedback pendulum policy."""
 
+from dataclasses import asdict
 import unittest
 
 import numpy as np
@@ -18,12 +19,22 @@ from core.pendulum_policy_gradient import (
 )
 
 
-ACTION_COST = """def reward(state, action, next_state):
+ACTION_COST = """def reward(state, action, next_state, params):
     return -action**2
 """
 
 
 class PendulumPolicyGradientTests(unittest.TestCase):
+    def test_reward_gets_current_next_state_action_and_parameter_dictionary(self):
+        config = PendulumConfig(horizon=2, dt=.02)
+        reward = compile_reward('''def reward(state, action, next_state, params):
+    assert isinstance(params, dict)
+    return next_state[..., 0] - state[..., 0] + action + params["b"]
+''', config)
+        trace = evaluate_rollouts([0, 0], np.array([[.4, .1]]), config, reward)
+        expected = np.diff(trace['states'][..., 0], axis=1) + trace['actions'] + config.b
+        np.testing.assert_allclose(trace['rewards'], expected)
+
     def test_exact_cancellation_matches_linear_system_without_angle_or_torque_clipping(self):
         config = PendulumConfig(b=0.03, dt=0.02, horizon=120)
         starts = np.array([[7.2, 4.0], [-4.5, -3.0], [0.3, -0.2]])
@@ -65,7 +76,7 @@ class PendulumPolicyGradientTests(unittest.TestCase):
 
     def test_discounted_returns_and_reward_arguments_use_each_real_transition(self):
         config = PendulumConfig(dt=0.03, horizon=5, discount=0.6)
-        source = """def reward(state, action, next_state):
+        source = """def reward(state, action, next_state, params):
     return (2*state[..., 0] - 3*state[..., 1] + 0.1*action
             + 5*next_state[..., 0] + 7*next_state[..., 1])
 """
@@ -87,7 +98,7 @@ class PendulumPolicyGradientTests(unittest.TestCase):
 
     def test_scalar_reward_broadcasts_across_monte_carlo_batch(self):
         config = PendulumConfig(horizon=4, discount=0.7)
-        reward = compile_reward("def reward(state, action, next_state):\n    return 2.5\n", config)
+        reward = compile_reward("def reward(state, action, next_state, params):\n    return 2.5\n", config)
         batch = evaluate_rollouts([0.0, 0.0], [[0.2, 0.1], [-0.2, -0.3]],
                                   config, reward)
         np.testing.assert_array_equal(batch["rewards"], np.full((2, 4), 2.5))
@@ -98,7 +109,7 @@ class PendulumPolicyGradientTests(unittest.TestCase):
         starts = np.array([[0.4, 0.1], [-0.7, 0.2], [0.2, -0.3], [-0.2, -0.1]])
         calls = []
 
-        def reward(state, action, next_state):
+        def reward(state, action, next_state, params):
             calls.append((state.copy(), action.copy(), next_state.copy()))
             return np.sum(state**2 - next_state**2, axis=-1) - action**2
 
@@ -134,7 +145,7 @@ class PendulumPolicyGradientTests(unittest.TestCase):
         config = PendulumConfig(horizon=2)
         # Valid for a single episode batch, but loses the episode axis when
         # the landscape supplies a batch of policies and episodes together.
-        reward = compile_reward("""def reward(state, action, next_state):
+        reward = compile_reward("""def reward(state, action, next_state, params):
     return np.ones(state.shape[0])
 """, config)
         with self.assertRaisesRegex(RewardError, r"shape \(2, 3\); got \(2,\)"):
@@ -168,25 +179,24 @@ class PendulumPolicyGradientTests(unittest.TestCase):
         np.testing.assert_array_equal(expected, [[True, True, False, True],
                                                 [False, False, False, False]])
         next_states = np.stack([theta, omega], axis=-1)
-        np.testing.assert_array_equal(reward(np.zeros_like(next_states), np.zeros_like(theta), next_states),
+        np.testing.assert_array_equal(reward(np.zeros_like(next_states), np.zeros_like(theta), next_states, asdict(config)),
                                        expected.astype(float))
         np.testing.assert_array_equal(goal_mask(np.stack([theta, omega], axis=-1), config),
                                        expected)
 
-        # Recompiling the same editable source picks up both new tolerances;
-        # the earlier callable remains bound to its original configuration.
+        # The same reward source uses the tolerances in its parameter dictionary.
         wider = PendulumConfig(theta_tolerance=0.04, omega_tolerance=0.06)
         wider_reward = compile_reward(DEFAULT_REWARD_SOURCE, wider)
         probe_theta, probe_omega = np.array([0.03, 0.01]), np.array([0.01, 0.04])
         probe_states = np.column_stack([probe_theta, probe_omega])
-        np.testing.assert_array_equal(reward(np.zeros_like(probe_states), np.zeros(2), probe_states), [0, 0])
-        np.testing.assert_array_equal(wider_reward(np.zeros_like(probe_states), np.zeros(2), probe_states), [1, 1])
+        np.testing.assert_array_equal(reward(np.zeros_like(probe_states), np.zeros(2), probe_states, asdict(config)), [0, 0])
+        np.testing.assert_array_equal(wider_reward(np.zeros_like(probe_states), np.zeros(2), probe_states, asdict(wider)), [1, 1])
         np.testing.assert_array_equal(goal_mask(np.column_stack([probe_theta, probe_omega]), wider),
                                        [True, True])
 
     def test_landscape_shape_and_chunking_match_independent_monte_carlo_rollouts(self):
         config = PendulumConfig(horizon=9, dt=0.02, discount=0.83)
-        reward = compile_reward("""def reward(state, action, next_state):
+        reward = compile_reward("""def reward(state, action, next_state, params):
     return (np.sum(state**2 - next_state**2, axis=-1) - action**2)
 """, config)
         starts = np.array([[0.4, 0.1], [-0.7, 0.2], [0.2, -0.3]])
@@ -291,15 +301,15 @@ class PendulumPolicyGradientTests(unittest.TestCase):
     def test_invalid_reward_code_reports_context_instead_of_silent_fallback(self):
         config = PendulumConfig(horizon=2)
         sources = {
-            "syntax": "def reward(state, action, next_state)\n    return 0\n",
+            "syntax": "def reward(state, action, next_state, params)\n    return 0\n",
             "missing_function": "def another_function(state, action, next_state):\n    return 0\n",
             "signature": "def reward(theta):\n    return theta\n",
-            "old_signature": "def reward(theta, omega, u, t):\n    return 0\n",
-            "runtime": "def reward(state, action, next_state):\n    return missing_variable\n",
-            "nan": "def reward(state, action, next_state):\n    return np.nan + 0*action\n",
-            "infinity": "def reward(state, action, next_state):\n    return np.inf + 0*action\n",
-            "shape": "def reward(state, action, next_state):\n    return np.zeros((2, 2))\n",
-            "not_vectorized": "def reward(state, action, next_state):\n    return 1.0 if next_state[..., 0] > 0 else 0.0\n",
+            "old_signature": "def reward(state, action, next_state):\n    return 0\n",
+            "runtime": "def reward(state, action, next_state, params):\n    return missing_variable\n",
+            "nan": "def reward(state, action, next_state, params):\n    return np.nan + 0*action\n",
+            "infinity": "def reward(state, action, next_state, params):\n    return np.inf + 0*action\n",
+            "shape": "def reward(state, action, next_state, params):\n    return np.zeros((2, 2))\n",
+            "not_vectorized": "def reward(state, action, next_state, params):\n    return 1.0 if next_state[..., 0] > 0 else 0.0\n",
         }
         for kind, source in sources.items():
             with self.subTest(kind=kind), self.assertRaisesRegex(RewardError, "(?i)reward"):
@@ -308,7 +318,7 @@ class PendulumPolicyGradientTests(unittest.TestCase):
 
     def test_runtime_reward_failure_after_successful_compile_includes_original_error_and_time(self):
         config = PendulumConfig(horizon=2)
-        source = """def reward(state, action, next_state):
+        source = """def reward(state, action, next_state, params):
     if np.any(np.abs(state[..., 0]) > 0.1):
         raise ZeroDivisionError("custom reward failed away from origin")
     return 1.0

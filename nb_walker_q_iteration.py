@@ -199,13 +199,15 @@ def _(core, mo):
     _explanation = mo.md(r"""
     ### Reward and initialization
 
-    The reward interface is `reward(state, action, params)`. `state` is the
+    The reward interface is `reward(state, action, next_state, params)`. `state` is the
     **current scalar Poincaré speed**, and `action` is $\alpha$ in radians.
     Both are arrays of shape `(states, actions)`; return a scalar or a
     broadcastable reward array. `params` is an ordinary dictionary containing
     the model/controller parameters and `discount`. For example:
     `-0.5 * params["mass"] * (params["length"] * state)**2` penalizes kinetic energy.
-    No outcome labels or next-state placeholders are passed to the reward.
+    `next_state` is the physical next section speed, before grid interpolation;
+    capture gives 0. If no next section exists, it is `np.nan`. Return finite rewards:
+    for example, `np.where(np.isfinite(next_state), 1.0, -1.0)`.
 
     The `reward_params` cell supplies the dictionary; add any custom reward
     parameters there when editing the notebook. Model keys include `gravity`,
@@ -214,15 +216,15 @@ def _(core, mo):
 
     Capture leads to the physical standing state, speed 0. Standing self-loops,
     so the default reward continues there and $V^*(0)=1/(1-\gamma)$.
-    Rewards are evaluated **before** the transition: a walking action that
+    The default reward uses the **current** state: a walking action that
     leads to standing first earns its standing reward on the next decision.
-    Failures receive the current-state reward and have zero continuation.
+    Failures receive your transition reward and have zero continuation.
 
     Initialization still uses `initial_q(omega, alpha)`. A function of `omega`
     alone broadcasts a $V_0$ across actions. All grid states, including standing,
     use your initialization. Available editor globals: `np`, `discount`.
     """)
-    reward_editor = mo.ui.code_editor(value=core.DEFAULT_REWARD_SOURCE, language="python", min_height=160, label="reward(state, action, params)").form(submit_button_label="Apply reward and restart learning")
+    reward_editor = mo.ui.code_editor(value=core.DEFAULT_REWARD_SOURCE, language="python", min_height=160, label="reward(state, action, next_state, params)").form(submit_button_label="Apply reward and restart learning")
     initial_editor = mo.ui.code_editor(value=core.DEFAULT_INITIAL_SOURCE, language="python", min_height=180, label="initial_q(omega, alpha)").form(submit_button_label="Apply initialization and restart learning")
     reward_editors_view = mo.vstack([_explanation, mo.hstack([reward_editor, initial_editor], widths="equal", gap=2)])
     return initial_editor, reward_editor, reward_editors_view

@@ -75,6 +75,17 @@ class WalkerTests(unittest.TestCase):
         self.assertTrue(np.any(outside))
         terminal_weight = grid.matrix[:, grid.terminal].toarray().ravel().reshape(grid.shape)
         self.assertTrue(np.all(terminal_weight[outside] == 1))
+        np.testing.assert_allclose(core.successor_speeds(grid)[outside], transitions['states'][1][outside])
+
+    def test_reward_gets_physical_next_speed_and_capture_zero(self):
+        reward, _ = core.prepare_tables(self.grid,
+            'def reward(state, action, next_state, params):\n    return np.where(np.isfinite(next_state), next_state, -5)',
+            core.DEFAULT_INITIAL_SOURCE, discount=.9)
+        captured = self.grid.status == stopping.CAPTURE
+        returning = self.grid.status == stopping.RETURN
+        np.testing.assert_array_equal(reward[captured], 0)
+        np.testing.assert_allclose(reward[returning], self.grid.transition_states[1][returning])
+        np.testing.assert_array_equal(reward[self.grid.done], -5)
 
     def test_sparse_success_reward_propagates_by_decision_count(self):
         reward, q0 = core.prepare_tables(self.grid, core.DEFAULT_REWARD_SOURCE,
@@ -120,7 +131,7 @@ class WalkerTests(unittest.TestCase):
         self.assertEqual(capped.updates, 0)
 
     def test_editable_rewards_initializations_and_errors(self):
-        r, q = core.prepare_tables(self.grid, 'def reward(state, action, params): return -2',
+        r, q = core.prepare_tables(self.grid, 'def reward(state, action, next_state, params): return -2',
                                    'def initial_q(omega, alpha): return omega**2 + alpha', discount=.9)
         expected = self.states[:, None]**2 + self.actions[None, :]
         np.testing.assert_allclose(q, expected)
@@ -134,7 +145,7 @@ class WalkerTests(unittest.TestCase):
             core.q_iteration(self.grid, r, q, discount=1)
 
     def test_reward_receives_current_scalar_state_action_and_parameter_dictionary(self):
-        source = '''def reward(state, action, params):
+        source = '''def reward(state, action, next_state, params):
     assert isinstance(params, dict)
     assert "goal" not in params and "failed" not in params and "next_state" not in params
     assert params["discount"] == 0.9
@@ -164,7 +175,7 @@ class WalkerTests(unittest.TestCase):
 
     def test_speed_reward_predicts_deceleration_in_grid_and_physical_rollout(self):
         reward, q0 = core.prepare_tables(self.grid,
-            'def reward(state, action, params): return state',
+            'def reward(state, action, next_state, params): return state',
             core.DEFAULT_INITIAL_SOURCE, discount=.95)
         result = core.q_iteration(self.grid, reward, q0)
         index = 80
@@ -235,7 +246,7 @@ class WalkerTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('node'), 'Node is needed to exercise the animation player')
     def test_animation_replays_when_the_learned_policy_changes(self):
         reward, q0 = core.prepare_tables(self.grid,
-            'def reward(state, action, params): return action',
+            'def reward(state, action, next_state, params): return action',
             core.DEFAULT_INITIAL_SOURCE, discount=.95)
         learned = core.q_iteration(self.grid, reward, q0)
         rollouts = [playback.rollout_policy(self.grid, q, 4.1, self.region)

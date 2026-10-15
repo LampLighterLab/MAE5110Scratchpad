@@ -4,7 +4,7 @@ Conventions follow CodeAssignments/assignments/assignment_2.md and
 CodeAssignments/instructor/inverted_pendulum_walker.py. The section is theta=0,
 omega>0; alpha is half the inter-leg angle. The fixed bounded ankle-feedback
 controller takes over on entering its empirical RoA, then maps to the absorbing
-standing state omega=0. Rewards are functions of the current scalar speed.
+standing state omega=0. Rewards receive the current and next scalar speeds.
 """
 
 from copy import deepcopy
@@ -17,7 +17,7 @@ from scipy.sparse import csr_matrix
 from . import walker_stopping as stopping
 
 
-DEFAULT_REWARD_SOURCE = '''def reward(state, action, params):
+DEFAULT_REWARD_SOURCE = '''def reward(state, action, next_state, params):
     # state = current section speed; action = alpha, both arrays of shape (S, A).
     # Capture maps to state=0, where the fixed ankle policy holds the walker.
     # Earn +1 per decision while standing, and 0 while walking.
@@ -215,8 +215,18 @@ def evaluate_code(source, name, arguments, shape, *, discount):
         raise EditorError(f"{name}: {type(error).__name__}: {error}") from error
 
 
+def successor_speeds(grid):
+    """Physical section speed, zero for capture, NaN for a missing return.
+
+    A return outside the grid still has a physical successor speed.
+    """
+    return np.where(grid.status == 1, 0.0,
+                    np.where((grid.status == 0) | (grid.status == 4),
+                             grid.transition_states[1], np.nan))
+
+
 def prepare_tables(grid, reward_source, initial_source, *, discount, params=None):
-    """Evaluate r(current speed, alpha, params), independently of outcome labels.
+    """Evaluate r(current speed, alpha, next speed, params).
 
     params contains model/controller parameters plus discount; callers may add
     reward-specific parameters. The numerical state/action mesh is unmodified,
@@ -225,7 +235,7 @@ def prepare_tables(grid, reward_source, initial_source, *, discount, params=None
     omega, alpha = grid.meshes()
     reward_params = grid.params | ({} if params is None else params) | {"discount": discount}
     kwargs = dict(shape=grid.shape, discount=discount)
-    reward = evaluate_code(reward_source, "reward", (omega, alpha, reward_params), **kwargs)
+    reward = evaluate_code(reward_source, "reward", (omega, alpha, successor_speeds(grid), reward_params), **kwargs)
     initial_q = evaluate_code(initial_source, "initial_q", (omega, alpha), **kwargs)
     return reward, initial_q
 

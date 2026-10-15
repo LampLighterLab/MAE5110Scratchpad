@@ -17,6 +17,13 @@ Start with `uv run marimo run nb_learning_lab.py` to choose a model and compare
 value iteration with sampled RL, tabular with approximated values, and greedy
 actions with a fitted policy or policy iteration. Reward code and parameters
 are editable; plots and animations follow the selected learning iteration.
+Models include a simple MDP, two pendulums, the inverted-pendulum walker, and
+SLIP with parameters from [Beyond Basins of Attraction](https://arxiv.org/abs/1806.08081).
+Editable rewards use `reward(state, action, next_state, params)` throughout.
+Define each complete Q or policy feature vector in `features(state, parameters)`,
+returning a one-dimensional NumPy array for one physical state. A few suggested
+features per model can populate the editor; then edit the code freely and inspect
+its learned coefficients and contributions.
 
 | What to explore | Run |
 | --- | --- |
@@ -44,3 +51,12 @@ Use `marimo edit` instead of `marimo run` to edit notebook cells.
 uv run python -m unittest discover -s tests -v
 uv run marimo check --strict nb_*.py
 ```
+
+To compare suggested features by policy return and physical rollout success:
+
+```sh
+uv run python benchmarks/check_learning_features.py --output /tmp/features.json
+```
+
+The [feature audit](benchmarks/FEATURE_AUDIT.md) records which examples work and
+which fail; passing the numerical tests alone does not establish successful learning.

@@ -10,15 +10,15 @@ is exactly theta'' + theta' + theta = 0.  Rewards are evaluated after every
 integration step; arriving in the goal never freezes the dynamics.
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import inspect
 
 import numpy as np
 
 
-DEFAULT_REWARD_SOURCE = """def reward(state, action, next_state):
-    near_theta = np.isclose(next_state[..., 0], 0.0, atol=theta_atol, rtol=0.0)
-    near_omega = np.isclose(next_state[..., 1], 0.0, atol=omega_atol, rtol=0.0)
+DEFAULT_REWARD_SOURCE = """def reward(state, action, next_state, params):
+    near_theta = np.isclose(next_state[..., 0], 0.0, atol=params["theta_tolerance"], rtol=0.0)
+    near_omega = np.isclose(next_state[..., 1], 0.0, atol=params["omega_tolerance"], rtol=0.0)
     return 1.0 * (near_theta & near_omega)
 """
 
@@ -81,10 +81,10 @@ def goal_mask(states, config):
     return isnear(states[..., 0], states[..., 1], config)
 
 
-def _reward_values(function, state, action, next_state, t):
+def _reward_values(function, state, action, next_state, params, t):
     """Evaluate one batch of transitions; allow a scalar constant reward."""
     try:
-        values = np.asarray(function(state, action, next_state), dtype=float)
+        values = np.asarray(function(state, action, next_state, params.copy()), dtype=float)
         target_shape = state.shape[:-1]
         if values.shape != target_shape and values.ndim != 0:
             raise RewardError(
@@ -101,17 +101,16 @@ def _reward_values(function, state, action, next_state, t):
 
 
 def compile_reward(source, config):
-    """Compile the editor's vectorized ``reward(state, action, next_state)``.
+    """Compile the editor's vectorized ``reward(state, action, next_state, params)``.
 
-    ``np``, ``theta_atol``, and ``omega_atol`` are available as globals, with
-    tolerances taken from the config.  ``isnear`` remains a compatibility
-    helper.  State arrays have shape ``(..., 2)``, ordered theta, omega;
+    ``params`` is a dictionary containing all PendulumConfig fields. ``np``
+    is available as a global. State arrays have shape ``(..., 2)``, ordered theta, omega;
     actions and returned rewards have shape ``(...)``.  Scalar constant
     rewards broadcast over the batch.  Evaluation is entirely vectorized.
     This executes local Python code; it is not a security sandbox.
     """
     if not isinstance(source, str) or not source.strip():
-        raise RewardError("Define a Python function: def reward(state, action, next_state): ...")
+        raise RewardError("Define a Python function: def reward(state, action, next_state, params): ...")
     try:
         code = compile(source, "<editable reward>", "exec")
     except SyntaxError as error:
@@ -128,12 +127,12 @@ def compile_reward(source, config):
         raise RewardError(f"Reward definition failed: {type(error).__name__}: {error}") from error
     function = namespace.get("reward")
     if not callable(function):
-        raise RewardError("The code must define a function named reward(state, action, next_state)")
+        raise RewardError("The code must define a function named reward(state, action, next_state, params)")
     try:
-        inspect.signature(function).bind(np.zeros((2, 2)), np.zeros(2), np.zeros((2, 2)))
+        inspect.signature(function).bind(np.zeros((2, 2)), np.zeros(2), np.zeros((2, 2)), asdict(config))
     except (TypeError, ValueError) as error:
-        raise RewardError("reward must accept three arguments: state, action, next_state") from error
-    _reward_values(function, np.zeros((2, 2)), np.zeros(2), np.zeros((2, 2)), 0.0)
+        raise RewardError("reward must accept four arguments: state, action, next_state, params") from error
+    _reward_values(function, np.zeros((2, 2)), np.zeros(2), np.zeros((2, 2)), asdict(config), 0.0)
     return function
 
 
@@ -228,6 +227,7 @@ def evaluate_rollouts(weights, starts, config, reward, *, passive=False):
         raise ValueError("evaluate_rollouts expects one weight pair with shape (2,)")
     starts = _validate_starts(starts)
     reward = _as_reward(reward)
+    params = asdict(config)
     n, h = len(starts), config.horizon
     states = np.empty((n, h + 1, 2), dtype=float)
     states[:, 0] = starts
@@ -239,7 +239,7 @@ def evaluate_rollouts(weights, starts, config, reward, *, passive=False):
         states[:, index + 1] = step(states[:, index], weights, config, passive=passive)
         time = (index + 1) * config.dt
         rewards[:, index] = _reward_values(
-            reward, states[:, index], actions[:, index], states[:, index + 1], time,
+            reward, states[:, index], actions[:, index], states[:, index + 1], params, time,
         )
         newly_hit = np.isnan(hit_time) & goal_mask(states[:, index + 1], config)
         hit_time[newly_hit] = time
@@ -286,6 +286,7 @@ def evaluate_parameters(parameter_pairs, starts, config, reward, chunk_size=256,
     parameters = parameters.reshape(-1, 2)
     starts = _validate_starts(starts)
     reward = _as_reward(reward)
+    params = asdict(config)
     if not isinstance(chunk_size, (int, np.integer)) or chunk_size < 1:
         raise ValueError("chunk_size must be a positive integer")
     scores = np.empty((len(parameters), len(starts)), dtype=float)
@@ -299,7 +300,7 @@ def evaluate_parameters(parameter_pairs, starts, config, reward, chunk_size=256,
             torque = policy_torque(weights, state)
             next_state = step(state, weights, config)
             totals += discount * _reward_values(
-                reward, state, torque, next_state,
+                reward, state, torque, next_state, params,
                 (index + 1) * config.dt,
             )
             state = next_state
