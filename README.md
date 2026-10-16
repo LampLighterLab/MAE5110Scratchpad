@@ -27,6 +27,8 @@ its learned coefficients and contributions.
 
 | What to explore | Run |
 | --- | --- |
+| Reward design: random-policy samples, editable variables, reward overlays and reward histograms | `uv run marimo run nb_reward_design.py` |
+| Inverted pendulum reward design: position and velocity errors, two rewards and overlaid reward histograms | `uv run marimo run nb_reward_design_inverted.py` |
 | Compare models, value representations, and policy-learning choices in one GUI | `uv run marimo run nb_learning_lab.py` |
 | Stable limit cycles and attraction from different initial conditions | `uv run marimo run nb_van_der_pol.py` |
 | How feedback linearization changes a pendulum's phase portrait | `uv run marimo run nb_pendulum_feedback_linearization.py` |
